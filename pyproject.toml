@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autobahn_client"
+version = "0.1.0"
+description = "Autobahn Client"
+readme = "README.md"
+authors = [{ name = "Denis Koterov", email = "denis.koterov@gmail.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "protobuf>=4.21.0",
+    "websockets>=15.0.1",
+    "asyncio>=3.4.3",
+    "numpy>=1.24.3",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/godbriger/autobahn"
+"Bug Tracker" = "https://github.com/godbriger/autobahn/issues"
+
+[tool.setuptools]
+packages = ["autobahn_client", "autobahn_client.proto"]
+
+[tool.setuptools.package-data]
+"autobahn_client.proto" = ["*.py", "*.pyi"]
+
+[tool.setuptools.cmdclass]
+protoc = "setup.ProtocCommand"
