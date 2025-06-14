@@ -1,6 +1,17 @@
 """Autobahn client implementation."""
 
-from typing import Awaitable, Callable, Optional, Union, get_origin, get_args
+from dataclasses import dataclass
+from typing import (
+    Awaitable,
+    Callable,
+    Type,
+    TypeVar,
+    Union,
+    get_origin,
+    get_args,
+    Any,
+    Generic,
+)
 import websockets
 from autobahn_client.proto.message_pb2 import (
     MessageType,
@@ -11,10 +22,11 @@ from autobahn_client.proto.message_pb2 import (
     RPCResponseType,
     TopicMessage,
     RPCMessage,
+    AbstractMessage,
 )
 import asyncio
 from autobahn_client.util import Address
-from google.protobuf.message import Message
+from google.protobuf import message as _message
 import functools
 import uuid
 import inspect
@@ -38,7 +50,7 @@ def from_function_to_rpc_name(function: Callable) -> str:
     """
     sig = inspect.signature(function)
 
-    # Validate that function has proper annotations
+    # Validate that function has proper annotations for the types
     if not function.__annotations__:
         raise ValueError(
             f"Function {function.__name__} must have type annotations for RPC usage"
@@ -58,38 +70,32 @@ def from_function_to_rpc_name(function: Callable) -> str:
         )
         param_types.append(param_type_name)
 
-    return_annotation = sig.return_annotation
-    if return_annotation == inspect.Signature.empty:
-        raise ValueError(
-            f"Function {function.__name__} must have return type annotation"
-        )
-
     return_type = (
-        return_annotation.__name__
-        if hasattr(return_annotation, "__name__")
-        else str(return_annotation)
+        sig.return_annotation.__name__
+        if hasattr(sig.return_annotation, "__name__")
+        else str(sig.return_annotation)
     )
 
     return f"{function.__name__}{''.join(param_types)}{return_type}"
 
 
-def _extract_optional_type(annotation):
-    """Extract the inner type from Optional[T] or Union[T, None]."""
-    origin = get_origin(annotation)
-    if origin is Union:
-        args = get_args(annotation)
-        # Check if this is Optional (Union[T, None])
-        if len(args) == 2 and type(None) in args:
-            return next(arg for arg in args if arg is not type(None))
-    return annotation
+T = TypeVar("T", bound=Union[_message.Message, None])
+R = TypeVar("R", bound=Union[_message.Message, None])
+
+
+@dataclass
+class RPCFunctionInfo:
+    name: str
+    handler: Callable
+    input_type: type
+    original_function: Callable
 
 
 class Autobahn:
     special_rpc_prefix_base = "RPC/FUNCTIONAL_SERVICE/"
     special_rpc_prefix_output = f"{special_rpc_prefix_base}OUTPUT/"
 
-    # Class-level registry for all decorated RPC functions
-    _global_rpc_functions: list = []
+    _global_rpc_functions: list[RPCFunctionInfo] = []
 
     @classmethod
     def rpc_callable(
@@ -108,46 +114,20 @@ class Autobahn:
             ValueError: If decorated function lacks proper type annotations
         """
 
-        def decorator(func: Callable[[Message | None], Awaitable[Message | None]]):
-            # Validate function signature
+        def decorator(
+            func: Union[Callable[[], Awaitable[R]], Callable[[T], Awaitable[R]]],
+        ):
             sig = inspect.signature(func)
-            params = list(sig.parameters.values())
-
-            if len(params) != 1:
-                raise ValueError(
-                    f"RPC callable {func.__name__} must have exactly one parameter"
-                )
-
-            input_param = params[0]
-            if input_param.annotation == inspect.Parameter.empty:
-                raise ValueError(
-                    f"RPC callable {func.__name__} parameter must have type annotation"
-                )
 
             if sig.return_annotation == inspect.Signature.empty:
                 raise ValueError(
                     f"RPC callable {func.__name__} must have return type annotation"
                 )
 
-            input_type = _extract_optional_type(input_param.annotation)
-            output_type = _extract_optional_type(sig.return_annotation)
+            output_type = sig.return_annotation
 
-            # Check if the type is actually None
-            if (
-                input_type == input_param.annotation
-                and get_origin(input_param.annotation) is Union
-            ):
-                input_type = None
-            if (
-                output_type == sig.return_annotation
-                and get_origin(sig.return_annotation) is Union
-            ):
-                output_type = None
-
-            @functools.wraps(func)
-            async def rpc_caller(
-                autobahn_instance: "Autobahn", message: Message
-            ) -> Message | None:
+            @functools.wraps(func)  # type: ignore[arg-type]
+            async def rpc_caller(autobahn_instance: "Autobahn", message: T) -> R | None:
                 if autobahn_instance.websocket is None:
                     raise ConnectionError(
                         "WebSocket not connected. Call begin() first."
@@ -157,7 +137,9 @@ class Autobahn:
                 response_topic = f"{cls.special_rpc_prefix_output}{call_id}"
 
                 try:
-                    serialized_message = message.SerializeToString() if message else b""
+                    serialized_message = (
+                        message.SerializeToString() if message is not None else b""
+                    )
 
                     rpc_message = RPCRequestMessage(
                         message_type=RPCMessageType.RPC_REQUEST,
@@ -165,7 +147,7 @@ class Autobahn:
                         payload=serialized_message,
                     )
 
-                    response_future: asyncio.Future[Message | None] = asyncio.Future()
+                    response_future: asyncio.Future[R | None] = asyncio.Future()
 
                     async def response_handler(payload: bytes) -> None:
                         try:
@@ -176,7 +158,6 @@ class Autobahn:
                                 == RPCResponseType.RPC_RESPONSE_SUCCESS
                             ):
                                 if response_message.payload == b"":
-                                    # Empty payload - check if we expect a return value
                                     if output_type is None or output_type == type(None):
                                         response_future.set_result(None)
                                     else:
@@ -186,7 +167,6 @@ class Autobahn:
                                             )
                                         )
                                 else:
-                                    # Non-empty payload - deserialize it
                                     if output_type is None or output_type == type(None):
                                         response_future.set_exception(
                                             Exception(
@@ -206,7 +186,6 @@ class Autobahn:
                                                 )
                                             )
                             else:
-                                # Error response
                                 error_msg = (
                                     response_message.payload.decode()
                                     if response_message.payload
@@ -233,22 +212,20 @@ class Autobahn:
                             result = await asyncio.wait_for(
                                 response_future, timeout=timeout_ms / 1000.0
                             )
+
                             return result
                         except asyncio.TimeoutError:
                             response_future.cancel()
                             raise TimeoutError(
                                 f"RPC call to '{from_function_to_rpc_name(func)}' timed out after {timeout_ms}ms"
                             )
-
                     finally:
-                        # Always cleanup the response subscription
                         try:
                             await autobahn_instance.unsubscribe(response_topic)
                         except Exception as e:
                             logger.warning(
                                 f"Failed to unsubscribe from response topic {response_topic}: {str(e)}"
                             )
-
                 except Exception as e:
                     logger.error(f"RPC call failed: {str(e)}")
                     raise
@@ -268,58 +245,38 @@ class Autobahn:
             ValueError: If decorated function lacks proper type annotations
         """
 
-        def decorator(func: Callable[[Message | None], Awaitable[Message | None]]):
-            # Validate function signature
+        def decorator(
+            func: Union[Callable[[], Awaitable[R]], Callable[[T], Awaitable[R]]],
+        ):
             sig = inspect.signature(func)
+            return_type = sig.return_annotation
             params = list(sig.parameters.values())
-
-            if len(params) != 1:
-                raise ValueError(
-                    f"RPC function {func.__name__} must have exactly one parameter"
-                )
-
-            input_param = params[0]
-            if input_param.annotation == inspect.Parameter.empty:
-                raise ValueError(
-                    f"RPC function {func.__name__} parameter must have type annotation"
-                )
-
-            if sig.return_annotation == inspect.Signature.empty:
-                raise ValueError(
-                    f"RPC function {func.__name__} must have return type annotation"
-                )
+            input_type = params[0].annotation if params else None
 
             name = from_function_to_rpc_name(func)
-            input_type = _extract_optional_type(input_param.annotation)
 
-            # Check if the type is actually None
-            if (
-                input_type == input_param.annotation
-                and get_origin(input_param.annotation) is Union
-            ):
-                input_type = None
-
-            @functools.wraps(func)
-            async def wrapper(message: Message | None) -> Message | None:
+            @functools.wraps(func)  # type: ignore[arg-type]
+            async def wrapper(message: T) -> R | None:
                 try:
-                    return await func(message)
+                    if message is not None:
+                        typed_message = (
+                            message  # Runtime: this will be the correct type
+                        )
+                        return await func(typed_message)  # type: ignore[arg-type]
+                    else:
+                        return await func(message)  # type: ignore[arg-type]
                 except Exception as e:
                     logger.error(f"RPC function {func.__name__} failed: {str(e)}")
                     raise
 
-            # Store service info and add to global registry for auto-registration
-            service_info = {
-                "name": cls.special_rpc_prefix_base + name,
-                "handler": wrapper,
-                "input_type": input_type,
-                "original_function": func,
-            }
+            service_info = RPCFunctionInfo(
+                name=cls.special_rpc_prefix_base + name,
+                handler=wrapper,
+                input_type=type(input_type),
+                original_function=func,
+            )
 
-            setattr(wrapper, "_rpc_service_info", service_info)
-
-            # Add to class-level registry for automatic discovery
             cls._global_rpc_functions.append(service_info)
-            logger.debug(f"Added RPC function {func.__name__} to global registry")
 
             return wrapper
 
@@ -347,41 +304,10 @@ class Autobahn:
         self.listener_lock = asyncio.Lock()
         self.listener_task = None
 
-        # Instance-specific RPC services registry
-        self.rpc_services: dict[
-            str,
-            tuple[
-                Callable[[Message | None], Awaitable[Message | None]],
-                type,  # type of input message
-            ],
-        ] = {}
-
-    def _auto_register_rpc_functions(self) -> None:
-        """Automatically register all @rpc_function decorated functions."""
-        registered_count = 0
-
-        for service_info in self._global_rpc_functions:
-            service_name = service_info["name"]
-
-            # Avoid duplicate registrations
-            if service_name not in self.rpc_services:
-                self.rpc_services[service_name] = (
-                    service_info["handler"],
-                    service_info["input_type"],
-                )
-                logger.info(
-                    f"Auto-registered RPC service: {service_info['original_function'].__name__}"
-                )
-                registered_count += 1
-
-        if registered_count > 0:
-            logger.info(f"Auto-registered {registered_count} RPC functions")
-        else:
-            logger.debug("No RPC functions found for auto-registration")
-
     async def __init_rpc_services(self) -> None:
         """Initialize RPC service subscriptions."""
-        for service_name, (service_handler, input_type) in self.rpc_services.items():
+        for service_info in self._global_rpc_functions:
+
             # Create a proper closure to capture the current service info
             async def create_rpc_callback(
                 handler: Callable, msg_type: type, svc_name: str
@@ -428,7 +354,7 @@ class Autobahn:
                                 )
 
                                 if result is not None:
-                                    if isinstance(result, Message):
+                                    if isinstance(result, _message.Message):
                                         response.payload = result.SerializeToString()
                                     else:
                                         # Invalid return type
@@ -474,10 +400,10 @@ class Autobahn:
 
             # Create the callback with proper closure
             callback = await create_rpc_callback(
-                service_handler, input_type, service_name
+                service_info.handler, service_info.input_type, service_info.name
             )
-            await self.subscribe(service_name, callback)
-            logger.info(f"RPC service {service_name} is listening")
+            await self.subscribe(service_info.name, callback)
+            logger.info(f"RPC service {service_info.name} is listening")
 
     async def unsubscribe(self, topic: str) -> None:
         """Unsubscribe from a topic.
@@ -523,10 +449,6 @@ class Autobahn:
             if not self.reconnect:
                 raise ConnectionError(f"Failed to connect: {str(e)}")
 
-        # Auto-register all RPC functions decorated with @rpc_function
-        self._auto_register_rpc_functions()
-
-        # Initialize RPC services
         await self.__init_rpc_services()
 
         if self.reconnect:
