@@ -463,7 +463,10 @@ class Autobahn:
         Raises:
             OSError: If connection fails
         """
-        websocket = await websockets.connect(self.address.make_url())
+        # Set max_size to 100MB (100 * 1024 * 1024 bytes)
+        websocket = await websockets.connect(
+            self.address.make_url(), max_size=100 * 1024 * 1024
+        )
 
         if self.callbacks and not self.first_subscription:
             self.__start_listener()
