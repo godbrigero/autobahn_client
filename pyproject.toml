@@ -23,4 +23,4 @@ dependencies = [
 "autobahn_client.proto" = ["*.py", "*.pyi"]
 
 [tool.setuptools.packages.find]
-where = ["src/python"]
+where = ["src/main/python"]

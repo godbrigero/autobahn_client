@@ -31,3 +31,5 @@ htmlcov/
 autobahn_client/proto/
 autobahn_client/proto/
 .venv/
+bin/
+.gradle/

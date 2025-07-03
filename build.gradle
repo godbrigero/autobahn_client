@@ -1,0 +1,137 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'com.google.protobuf' version '0.9.4'
+}
+
+group = 'autobahn'
+version = '0.1.2'
+
+sourceCompatibility = JavaVersion.VERSION_21
+targetCompatibility = JavaVersion.VERSION_21
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.named('sourcesJar') {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Protocol Buffers
+    implementation 'com.google.protobuf:protobuf-java:3.25.3'
+    
+    // WebSocket client
+    implementation 'org.java-websocket:Java-WebSocket:1.5.7'
+    
+    // Async utilities and reactive streams
+    implementation 'io.reactivex.rxjava3:rxjava:3.1.8'
+    
+    // Logging
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
+    
+    // JSON processing (for configuration if needed)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
+    
+    // Utilities
+    implementation 'org.apache.commons:commons-lang3:3.14.0'
+    
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
+    testImplementation 'org.mockito:mockito-core:5.8.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.8.0'
+    testImplementation 'org.awaitility:awaitility:4.2.0'
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.25.3'
+    }
+    
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java:1.60.1'
+        }
+    }
+    
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {}
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs 'src/main/java'
+            srcDirs 'build/generated/source/proto/main/java'
+        }
+        proto {
+            srcDirs 'proto'
+        }
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn 'generateProto'
+}
+
+tasks.named('jar') {
+    manifest {
+        attributes(
+            'Implementation-Title': project.name,
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'Autobahn Project'
+        )
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            
+            pom {
+                name = 'Autobahn Client Java'
+                description = 'Java implementation of the Autobahn WebSocket client with Protocol Buffer support'
+                url = 'https://github.com/your-org/autobahn_client'
+                
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+                
+                developers {
+                    developer {
+                        id = 'denis.koterov'
+                        name = 'Denis Koterov'
+                        email = 'denis.koterov@gmail.com'
+                    }
+                }
+            }
+        }
+    }
+}
+
+wrapper {
+    gradleVersion = '8.5'
+    distributionType = Wrapper.DistributionType.ALL
+} 
