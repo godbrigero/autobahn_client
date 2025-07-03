@@ -4,13 +4,8 @@ from dataclasses import dataclass
 from typing import (
     Awaitable,
     Callable,
-    Type,
     TypeVar,
     Union,
-    get_origin,
-    get_args,
-    Any,
-    Generic,
 )
 import websockets
 from autobahn_client.proto.message_pb2 import (
@@ -21,8 +16,6 @@ from autobahn_client.proto.message_pb2 import (
     RPCResponseMessage,
     RPCResponseType,
     TopicMessage,
-    RPCMessage,
-    AbstractMessage,
 )
 import asyncio
 from autobahn_client.util import Address
