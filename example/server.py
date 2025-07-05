@@ -5,6 +5,12 @@ from google.protobuf.message import Message
 from autobahn_client.proto.message_pb2 import AbstractMessage
 
 
+# RPC function that is on the server side
+# the contents of the function DO matters as
+# when the client calls the function on it's side
+# the internal works of the autobahn client will relay
+# the call to the server side function and the result
+# will be relayed back to the client
 @Autobahn.rpc_function()
 async def get_user(request: AbstractMessage) -> None:
     print("GOT!!!")

@@ -4,6 +4,9 @@ import asyncio
 from autobahn_client.proto.message_pb2 import AbstractMessage
 
 
+# RPC function that is on the client side
+# The contents of the function do not matter, it is just a placeholder
+# and gets replaced by the "@Autobahn.rpc_callable()" decorator
 @Autobahn.rpc_callable()
 async def get_user(request: AbstractMessage) -> None:
     raise NotImplementedError()

@@ -7,10 +7,9 @@ plugins {
 group = 'autobahn'
 version = '0.1.2'
 
-sourceCompatibility = JavaVersion.VERSION_21
-targetCompatibility = JavaVersion.VERSION_21
-
 java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
     withSourcesJar()
     withJavadocJar()
 }
@@ -30,18 +29,17 @@ dependencies {
     // WebSocket client
     implementation 'org.java-websocket:Java-WebSocket:1.5.7'
     
-    // Async utilities and reactive streams
-    implementation 'io.reactivex.rxjava3:rxjava:3.1.8'
-    
     // Logging
     implementation 'org.slf4j:slf4j-api:2.0.9'
-    implementation 'ch.qos.logback:logback-classic:1.4.14'
     
     // JSON processing (for configuration if needed)
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
     
     // Utilities
     implementation 'org.apache.commons:commons-lang3:3.14.0'
+    
+    implementation 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
     
     // Testing
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
