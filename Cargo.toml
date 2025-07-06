@@ -1,0 +1,14 @@
+[workspace]
+members = [
+    "src/main/rust",
+]
+
+[workspace.dependencies]
+tokio = { version = "1.36", features = ["full"] }
+tokio-tungstenite = "0.26.2"
+futures-util = "0.3"
+prost = "0.13.5"
+bytes = "1.5"
+serde_json = "1.0"
+url = "2.5"
+prost-build = "0.13.5"

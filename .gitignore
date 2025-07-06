@@ -33,3 +33,7 @@ autobahn_client/proto/
 .venv/
 bin/
 .gradle/
+
+# Added by cargo
+
+/target
