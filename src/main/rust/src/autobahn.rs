@@ -254,3 +254,38 @@ impl Autobahn {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_autobahn() {
+        let messages = Arc::new(Mutex::new(Vec::new()));
+        let autobahn = Autobahn::new_default(Address::new("localhost", 8080));
+        autobahn.begin().await.unwrap();
+
+        let messages_clone = messages.clone();
+        autobahn
+            .subscribe("test", move |payload| {
+                let messages_clone = messages_clone.clone();
+
+                async move {
+                    let mut messages = messages_clone.lock().await;
+                    messages.push(payload);
+                }
+            })
+            .await
+            .unwrap();
+
+        autobahn
+            .publish("test", b"Hello, world!".to_vec())
+            .await
+            .unwrap();
+
+        time::sleep(Duration::from_millis(500)).await;
+
+        assert_eq!(messages.lock().await.len(), 1);
+        assert_eq!(messages.lock().await[0], b"Hello, world!");
+    }
+}
