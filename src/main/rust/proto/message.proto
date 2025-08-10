@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package proto.autobahn;
+
+enum MessageType {
+  SERVER_STATE = 0;
+  SERVER_FORWARD = 1;
+  PUBLISH = 2;
+  SUBSCRIBE = 3;
+  UNSUBSCRIBE = 4;
+}
+
+message AbstractMessage {
+  MessageType message_type = 1;
+}
+
+message ServerStateMessage {
+  MessageType message_type = 1;
+  string uuid = 2;
+  repeated string topics = 3;
+}
+
+message ServerForwardMessage {
+  MessageType message_type = 1;
+  bytes payload = 2;
+}
+
+message TopicMessage {
+  MessageType message_type = 1;
+  string topic = 2;
+}
+
+message PublishMessage {
+  MessageType message_type = 1;
+  string topic = 2;
+  bytes payload = 3;
+}
+
+message UnsubscribeMessage {
+  MessageType message_type = 1;
+  string topic = 2;
+}
+
+enum RPCMessageType {
+  RPC_REQUEST = 0;
+  RPC_RESPONSE = 1;
+}
+
+message RPCMessage {
+  RPCMessageType message_type = 1;
+  string call_id = 2;
+}
+
+message RPCRequestMessage {
+  RPCMessageType message_type = 1;
+  string call_id = 2;
+  bytes payload = 3;
+}
+
+enum RPCResponseType {
+  RPC_RESPONSE_SUCCESS = 0;
+  RPC_RESPONSE_ERROR = 1;
+}
+
+message RPCResponseMessage {
+  RPCMessageType message_type = 1;
+  string call_id = 2;
+  RPCResponseType response_type = 3;
+  bytes payload = 4;
+}
+
+message RPCEmpty {
+}
+

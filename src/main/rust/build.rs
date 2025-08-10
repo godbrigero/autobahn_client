@@ -7,15 +7,8 @@ extern crate prost_build;
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
 
-    // Generate protobuf bindings
-    let proto_dir = PathBuf::from(&manifest_dir)
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("proto");
+    // Generate protobuf bindings. For publishability, keep protos within the crate package.
+    let proto_dir = PathBuf::from(&manifest_dir).join("proto");
     let proto_files: Vec<String> = WalkDir::new(&proto_dir)
         .follow_links(true)
         .into_iter()

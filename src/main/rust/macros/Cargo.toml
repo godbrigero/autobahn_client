@@ -2,6 +2,15 @@
 name = "autobahn-client-macros"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+readme = "README.md"
+description = "Proc-macros for autobahn-client to generate RPC clients/servers"
+homepage = "https://github.com/godbrigero/autobahn_client"
+repository = "https://github.com/godbrigero/autobahn_client"
+keywords = ["proc-macro", "rpc", "protobuf"]
+categories = ["development-tools::procedural-macro"]
+rust-version = "1.74"
+exclude = ["example/*", "src/main/java/*", "src/test/*", "gradle*", "*.gradle"]
 
 [lib]
 proc-macro = true
