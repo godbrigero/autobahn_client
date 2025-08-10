@@ -8,7 +8,7 @@ description = "Proc-macros for autobahn-client to generate RPC clients/servers"
 homepage = "https://github.com/godbrigero/autobahn_client"
 repository = "https://github.com/godbrigero/autobahn_client"
 keywords = ["proc-macro", "rpc", "protobuf"]
-categories = ["development-tools::procedural-macro"]
+categories = ["development-tools"]
 rust-version = "1.74"
 exclude = ["example/*", "src/main/java/*", "src/test/*", "gradle*", "*.gradle"]
 
