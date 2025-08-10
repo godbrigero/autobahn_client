@@ -1,3 +1,5 @@
+## DO NOT USE THIS UNLESS YOU ARE USING AUTOBAHN_CLIENT LIBRARY! This WILL NOT WORK.
+
 autobahn-client-macros
 
 Procedural macros for `autobahn-client` that generate RPC client and server glue code.
