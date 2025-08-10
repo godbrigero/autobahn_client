@@ -28,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.google.protobuf.ByteString;
 
+import autobahn.client.rpc.client.ClientFunction;
 import proto.autobahn.Message.MessageType;
 import proto.autobahn.Message.PublishMessage;
 
@@ -44,6 +45,10 @@ public class IntegrationTests {
   void setUp() {
     testAddress = new Address("localhost", 8080);
     client = new AutobahnClient(testAddress, new HashMap<>(), mockExecutor);
+  }
+
+  @ClientFunction
+  void testRPCFunction() {
   }
 
   @DisplayName("Address Tests")

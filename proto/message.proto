@@ -68,3 +68,6 @@ message RPCResponseMessage {
   RPCResponseType response_type = 3;
   bytes payload = 4;
 }
+
+message RPCEmpty {
+}

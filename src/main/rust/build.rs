@@ -1,6 +1,4 @@
 use std::env;
-use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 

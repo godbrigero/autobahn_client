@@ -20,7 +20,6 @@ import com.google.protobuf.ByteString;
 
 import proto.autobahn.Message.MessageType;
 import proto.autobahn.Message.PublishMessage;
-import proto.autobahn.Message.PublishMessageOrBuilder;
 import proto.autobahn.Message.TopicMessage;
 import proto.autobahn.Message.UnsubscribeMessage;
 
@@ -229,8 +228,7 @@ public class AutobahnClient {
 
   private void handleMessage(byte[] messageBytes) {
     try {
-      PublishMessageOrBuilder messageProto = proto.autobahn.Message.PublishMessage.parseFrom(
-          messageBytes);
+      PublishMessage messageProto = PublishMessage.parseFrom(messageBytes);
 
       if (messageProto.getMessageType() == MessageType.PUBLISH) {
         String topic = messageProto.getTopic();

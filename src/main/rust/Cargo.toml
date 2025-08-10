@@ -12,6 +12,9 @@ bytes = "1.5"
 serde_json = "1.0"
 url = "2.5"
 prost-build = "0.13.5"
+autobahn-client-macros = { path = "macros" }
+uuid = { version = "1.13", features = ["v4"] }
+ctor = "0.2"
 
 [build-dependencies]
 prost-build = "0.13.5"

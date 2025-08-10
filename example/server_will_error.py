@@ -19,7 +19,7 @@ from autobahn_client.proto.message_pb2 import (
 async def get_user(request: AbstractMessage) -> ServerForwardMessage:
     print("Server: Got RPC request")
     return ServerForwardMessage(
-        message_type=MessageType.SERVER_FORWARD,
+        message_type="RPC_RESPONSE_ERROR",  # this is undefined behavior and the proto will not compile and will throw an error
         payload=b"Hello from the server",
     )
 

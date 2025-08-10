@@ -1,0 +1,18 @@
+[package]
+name = "autobahn-client-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+autobahn-client = { path = "../../src/main/rust" }
+prost = "0.13.5"
+tokio = { version = "1.36", features = ["full"] }
+ctor = "0.2"
+
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
