@@ -37,17 +37,23 @@ public class AutobahnClient {
     this(
         address,
         new HashMap<>(),
-        Executors.newSingleThreadScheduledExecutor());
+        Executors.newSingleThreadScheduledExecutor(),
+        LoggerFactory.getLogger(AutobahnClient.class));
+  }
+
+  public AutobahnClient(Address address, Logger loggerClass) {
+    this(address, new HashMap<>(), Executors.newSingleThreadScheduledExecutor(), loggerClass);
   }
 
   public AutobahnClient(
       Address address,
       Map<String, List<NamedCallback>> callbacks,
-      ScheduledExecutorService reconnectExecutor) {
+      ScheduledExecutorService reconnectExecutor,
+      Logger loggerClass) {
     this.address = address;
     this.callbacks = callbacks;
     this.reconnectExecutor = reconnectExecutor;
-    this.logger = LoggerFactory.getLogger(AutobahnClient.class);
+    this.logger = loggerClass;
   }
 
   private void scheduleReconnect() {
@@ -81,6 +87,11 @@ public class AutobahnClient {
           scheduleReconnect(); // Schedule another attempt
           return null;
         });
+  }
+
+  public boolean isConnected() {
+    return websocket != null && !websocket.isClosed() && !isReconnecting && !websocket.isClosing()
+        && websocket.isOpen();
   }
 
   public CompletableFuture<Void> begin() {
