@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.ByteString;
 
@@ -44,7 +45,8 @@ public class IntegrationTests {
   @BeforeEach
   void setUp() {
     testAddress = new Address("localhost", 8080);
-    client = new AutobahnClient(testAddress, new HashMap<>(), mockExecutor);
+    client = new AutobahnClient(testAddress, new HashMap<>(), mockExecutor,
+        LoggerFactory.getLogger(AutobahnClient.class));
   }
 
   @ClientFunction
@@ -150,8 +152,9 @@ public class IntegrationTests {
 
   @Test
   /**
-   * @apiNote please note that for this to work, the autobahn server backend needs to be running and
-   * listening on port 8080 localhost.
+   * @apiNote please note that for this to work, the autobahn server backend needs
+   *          to be running and
+   *          listening on port 8080 localhost.
    * @throws InterruptedException
    */
   void testPubSubFunctionality() throws InterruptedException {
@@ -186,7 +189,8 @@ public class IntegrationTests {
     AutobahnClient fullClient = new AutobahnClient(
         testAddress,
         callbacks,
-        mockExecutor);
+        mockExecutor,
+        LoggerFactory.getLogger(AutobahnClient.class));
     assertNotNull(fullClient);
   }
 
@@ -233,7 +237,7 @@ public class IntegrationTests {
     AutobahnClient testClient = new AutobahnClient(
         testAddress,
         callbacks,
-        mockExecutor);
+        mockExecutor, LoggerFactory.getLogger(AutobahnClient.class));
 
     // Add a callback to test
     AtomicBoolean messageReceived = new AtomicBoolean(false);
@@ -290,7 +294,7 @@ public class IntegrationTests {
     AutobahnClient concurrentClient = new AutobahnClient(
         testAddress,
         callbacks,
-        mockExecutor);
+        mockExecutor, LoggerFactory.getLogger(AutobahnClient.class));
 
     // Simulate concurrent callback additions
     List<CompletableFuture<Void>> futures = new ArrayList<>();
@@ -326,7 +330,7 @@ public class IntegrationTests {
     AutobahnClient testClient = new AutobahnClient(
         testAddress,
         callbacks,
-        mockExecutor);
+        mockExecutor, LoggerFactory.getLogger(AutobahnClient.class));
 
     // Add a callback that throws an exception
     NamedCallback errorCallback = NamedCallback.FromConsumer(bytes -> {
@@ -370,7 +374,7 @@ public class IntegrationTests {
     AutobahnClient testClient = new AutobahnClient(
         testAddress,
         callbacks,
-        mockExecutor);
+        mockExecutor, LoggerFactory.getLogger(AutobahnClient.class));
 
     // Use reflection to access the private handleMessage method
     java.lang.reflect.Method handleMessage = AutobahnClient.class.getDeclaredMethod("handleMessage", byte[].class);
@@ -423,7 +427,7 @@ public class IntegrationTests {
     AutobahnClient testClient = new AutobahnClient(
         testAddress,
         callbacks,
-        mockExecutor);
+        mockExecutor, LoggerFactory.getLogger(AutobahnClient.class));
 
     AtomicInteger topic1Count = new AtomicInteger(0);
     AtomicInteger topic2Count = new AtomicInteger(0);
