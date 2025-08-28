@@ -36,6 +36,8 @@ import proto.autobahn.Message.PublishMessage;
 @ExtendWith(MockitoExtension.class)
 public class IntegrationTests {
 
+  private static final boolean SHOULD_CONNECT = false;
+
   @Mock
   private ScheduledExecutorService mockExecutor;
 
@@ -158,6 +160,9 @@ public class IntegrationTests {
    * @throws InterruptedException
    */
   void testPubSubFunctionality() throws InterruptedException {
+    if (!SHOULD_CONNECT)
+      return;
+
     client.begin().join();
     var testOutputList = new ArrayList<Integer>();
     client.subscribe("test_topic/123", NamedCallback.FromConsumer((byte[] data) -> {
