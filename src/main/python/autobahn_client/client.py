@@ -1,6 +1,8 @@
 """Autobahn client implementation."""
 
 from dataclasses import dataclass
+import threading
+import time
 from typing import (
     Awaitable,
     Callable,
@@ -458,7 +460,10 @@ class Autobahn:
         """
         # Set max_size to 100MB (100 * 1024 * 1024 bytes)
         websocket = await websockets.connect(
-            self.address.make_url(), max_size=100 * 1024 * 1024
+            self.address.make_url(),
+            max_size=None,
+            max_queue=0,
+            write_limit=10,
         )
 
         if self.callbacks and not self.first_subscription:
@@ -535,6 +540,9 @@ class Autobahn:
 
             try:
                 await self.websocket.send(message_proto.SerializeToString())
+
+                # Yield to let the event loop run the receive/callback tasks
+                await asyncio.sleep(0)
             except Exception as e:
                 logger.error(f"Error sending message to topic {topic}: {str(e)}")
                 self.websocket = None
@@ -542,50 +550,55 @@ class Autobahn:
                     raise
 
     def __start_listener(self) -> None:
-        """Start the message listener task."""
-        if self.listener_task is None or self.listener_task.done():
-            self.listener_task = asyncio.create_task(self.__listener())
+        if self.listener_task is None or self.listener_task.is_alive():
+            self.listener_task = threading.Thread(
+                target=self.__listener, args=(asyncio.get_event_loop(),)
+            )
+            self.listener_task.start()
 
-    async def __listener(self) -> None:
-        """Listen for incoming WebSocket messages."""
-        async with self.listener_lock:
-            while True:
+    def __listener(self, loop: asyncio.AbstractEventLoop) -> None:
+        while True:
+            try:
+                if self.websocket is None:
+                    time.sleep(0.5)
+                    continue
+
+                message = asyncio.run_coroutine_threadsafe(
+                    self.websocket.recv(), loop
+                ).result()
+
+                if isinstance(message, str):
+                    logger.warning(f"Received unexpected string message: {message}")
+                    continue
+
                 try:
-                    if self.websocket is None:
-                        await asyncio.sleep(0.5)
-                        continue
-
-                    message = await self.websocket.recv()
-                    if isinstance(message, str):
-                        logger.warning(f"Received unexpected string message: {message}")
-                        continue
-
-                    try:
-                        message_proto = PublishMessage.FromString(message)
-                        if message_proto.message_type == MessageType.PUBLISH:
-                            if message_proto.topic in self.callbacks:
-                                try:
-                                    await self.callbacks[message_proto.topic](
+                    message_proto = PublishMessage.FromString(message)
+                    if message_proto.message_type == MessageType.PUBLISH:
+                        if message_proto.topic in self.callbacks:
+                            try:
+                                # Schedule the async callback on the main event loop
+                                asyncio.run_coroutine_threadsafe(
+                                    self.callbacks[message_proto.topic](
                                         message_proto.payload
-                                    )
-                                except Exception as e:
-                                    logger.error(
-                                        f"Error in callback for topic {message_proto.topic}: {str(e)}"
-                                    )
-                    except Exception as e:
-                        logger.error(f"Error parsing message: {str(e)}")
-
-                except websockets.exceptions.ConnectionClosed:
-                    logger.info(
-                        "WebSocket connection closed, waiting for reconnection..."
-                    )
-                    self.websocket = None
-                    await asyncio.sleep(0.5)
-                    continue
+                                    ),
+                                    loop,
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error in callback for topic {message_proto.topic}: {str(e)}"
+                                )
                 except Exception as e:
-                    logger.error(f"Error in listener: {str(e)}")
-                    await asyncio.sleep(0.5)
-                    continue
+                    logger.error(f"Error parsing message: {str(e)}")
+
+            except websockets.exceptions.ConnectionClosed:
+                logger.info("WebSocket connection closed, waiting for reconnection...")
+                self.websocket = None
+                time.sleep(0.5)
+                continue
+            except Exception as e:
+                logger.error(f"Error in listener: {str(e)}")
+                time.sleep(0.5)
+                continue
 
     async def subscribe(
         self, topic: str, callback: Callable[[bytes], Awaitable[None]]
