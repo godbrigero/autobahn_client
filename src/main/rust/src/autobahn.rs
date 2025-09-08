@@ -371,6 +371,8 @@ impl Autobahn {
 
 #[cfg(test)]
 mod tests {
+    use tokio::time::sleep;
+
     use super::*;
 
     #[tokio::test]
@@ -397,9 +399,183 @@ mod tests {
             .await
             .unwrap();
 
-        time::sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(500)).await;
 
         assert_eq!(messages.lock().await.len(), 1);
         assert_eq!(messages.lock().await[0], b"Hello, world!");
+    }
+
+    mod time {
+        use super::*;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        static SHOULD_CONNECT: bool = false;
+
+        /// Encodes a payload with the current timestamp in nanoseconds (as u64, little-endian).
+        async fn encode_time_message(payload: Vec<u8>) -> Vec<u8> {
+            let mut message = Vec::with_capacity(payload.len() + 8);
+            message.extend_from_slice(&payload);
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64;
+            message.extend_from_slice(&now.to_le_bytes());
+            message
+        }
+
+        /// Decodes a message into (payload, timestamp).
+        /// If the message is too short, returns (message, 0).
+        async fn decode_time_message(message: Vec<u8>) -> (Vec<u8>, u64) {
+            if message.len() < 8 {
+                return (message, 0);
+            }
+            let payload = message[..message.len() - 8].to_vec();
+            let mut time_bytes = [0u8; 8];
+            time_bytes.copy_from_slice(&message[message.len() - 8..]);
+            let timestamp = u64::from_le_bytes(time_bytes);
+            (payload, timestamp)
+        }
+
+        /// Sends `number_of_messages` messages with encoded timestamps and collects round-trip times.
+        /// Returns a Vec<u64> of round-trip times in nanoseconds.
+        async fn send_n_time_messages(
+            autobahn: &Arc<Autobahn>,
+            payload: Vec<u8>,
+            number_of_messages: usize,
+        ) -> Vec<u64> {
+            let times = Arc::new(Mutex::new(Vec::with_capacity(number_of_messages)));
+            let received = Arc::new(Mutex::new(0usize));
+
+            let times_clone = Arc::clone(&times);
+            let received_clone = Arc::clone(&received);
+
+            autobahn
+                .subscribe("test", move |payload| {
+                    let times_clone = Arc::clone(&times_clone);
+                    let received_clone = Arc::clone(&received_clone);
+                    async move {
+                        let (_payload, sent_timestamp) = decode_time_message(payload).await;
+                        let now = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_nanos() as u64;
+                        let rtt = now.saturating_sub(sent_timestamp);
+                        {
+                            let mut times = times_clone.lock().await;
+                            times.push(rtt);
+                        }
+                        {
+                            let mut recvd = received_clone.lock().await;
+                            *recvd += 1;
+                        }
+                    }
+                })
+                .await
+                .unwrap();
+
+            for _ in 0..number_of_messages {
+                autobahn
+                    .publish("test", encode_time_message(payload.clone()).await)
+                    .await
+                    .unwrap();
+            }
+
+            // Wait until all messages are received
+            loop {
+                let recvd = *received.lock().await;
+                if recvd >= number_of_messages {
+                    break;
+                }
+                sleep(Duration::from_millis(10)).await;
+            }
+
+            {
+                let mut guard = times.lock().await;
+                std::mem::take(&mut *guard)
+            }
+        }
+
+        /// Prints statistics (average, median, min, max, stddev) for a vector of nanosecond times.
+        async fn print_statistics(times: Vec<u64>) {
+            if times.is_empty() {
+                println!("No times to report.");
+                return;
+            }
+            let mut sorted = times.clone();
+            sorted.sort_unstable();
+
+            let sum: u128 = times.iter().map(|&t| t as u128).sum();
+            let count = times.len() as u128;
+            let avg = sum / count;
+
+            let median = if times.len() % 2 == 0 {
+                let mid = times.len() / 2;
+                ((sorted[mid - 1] as u128 + sorted[mid] as u128) / 2) as u64
+            } else {
+                sorted[times.len() / 2]
+            };
+
+            let min = *sorted.first().unwrap();
+            let max = *sorted.last().unwrap();
+
+            let avg_f64 = avg as f64;
+            let stddev = (times
+                .iter()
+                .map(|&t| {
+                    let diff = t as f64 - avg_f64;
+                    diff * diff
+                })
+                .sum::<f64>()
+                / times.len() as f64)
+                .sqrt();
+
+            println!("Average time (ms): {}", avg as f64 / 1000000.0);
+            println!("Median time (ms): {}", median as f64 / 1000000.0);
+            println!("Min time (ms): {}", min as f64 / 1000000.0);
+            println!("Max time (ms): {}", max as f64 / 1000000.0);
+            println!("Standard deviation (ms): {:.2}", stddev as f64 / 1000000.0);
+        }
+
+        fn generate_pseudo_random_payload(size: usize) -> Vec<u8> {
+            let mut seed = 0x1234_5678_u64 ^ (size as u64);
+            let mut payload = Vec::with_capacity(size);
+            for _ in 0..size {
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                payload.push((seed & 0xFF) as u8);
+            }
+            payload
+        }
+
+        #[tokio::test]
+        async fn test_time_0mb() {
+            /// Integration test: sends 1000 empty messages and prints round-trip time statistics.
+            if !SHOULD_CONNECT {
+                return;
+            }
+
+            let autobahn = Autobahn::new_default(Address::new("localhost", 8080));
+            autobahn.begin().await.unwrap();
+
+            let times = send_n_time_messages(&autobahn, b"".to_vec(), 1000).await;
+            print_statistics(times).await;
+            // panic!("test_time_0mb");
+        }
+
+        #[tokio::test]
+        async fn test_time_1mb() {
+            /// Integration test: sends 1000 empty messages and prints round-trip time statistics.
+            if !SHOULD_CONNECT {
+                return;
+            }
+
+            let autobahn = Autobahn::new_default(Address::new("localhost", 8080));
+            autobahn.begin().await.unwrap();
+
+            let times =
+                send_n_time_messages(&autobahn, generate_pseudo_random_payload(1024 * 1024), 1000)
+                    .await;
+            print_statistics(times).await;
+            // panic!("test_time_0mb");
+        }
     }
 }
