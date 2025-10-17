@@ -24,10 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 class Autobahn:
-    special_rpc_prefix_base = "RPC/FUNCTIONAL_SERVICE/"
-    special_rpc_prefix_output = f"{special_rpc_prefix_base}OUTPUT/"
-    _global_rpc_functions: list[RPCFunctionInfo] = []
-
     def __init__(
         self,
         address: Address,

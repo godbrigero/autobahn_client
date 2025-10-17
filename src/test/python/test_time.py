@@ -75,6 +75,23 @@ def test_noms_4mb():
     asyncio.run(run_test(extra_payload, None))
 
 
+async def test_multi_subscribe():
+    extra_payload = b""
+    client = Autobahn(address=Address(host=HOST, port=PORT))
+    await client.begin()
+
+    async def callback(payload: bytes):
+        print(f"Received payload: {payload}")
+
+    await client.subscribe("one", callback)
+    # await client.subscribe("two", callback)
+
+    for i in range(10):
+        await client.publish("one", b"one")
+        await client.publish("two", b"two")
+        await asyncio.sleep(1)
+
+
 def test_multi_message_0mb(number_of_threads: int) -> None:
     extra_payload = os.urandom(1024 * 1024 * 1)
 
@@ -110,6 +127,8 @@ if __name__ == "__main__":
         test_noms_4mb()
     elif args.test == "multi_message_0mb":
         test_multi_message_0mb(2)
+    elif args.test == "multi_subscribe":
+        asyncio.run(test_multi_subscribe())
     else:
         print("Invalid test")
         exit(1)

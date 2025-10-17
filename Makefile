@@ -27,3 +27,6 @@ test_noms_4mb:
 
 test_multi_message_0mb:
 	$(PYTHONPATH) -m src.test.python.test_time --test multi_message_0mb
+
+test_multi_subscribe:
+	$(PYTHONPATH) -m src.test.python.test_time --test multi_subscribe

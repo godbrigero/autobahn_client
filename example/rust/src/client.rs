@@ -31,10 +31,14 @@ pub async fn main() {
     let client = Autobahn::new_default(address);
 
     client.initialize_rpc_server().await;
+    let mut total_time = 0;
+    for i in 0..10 {
+        let start = Instant::now();
+        let result = test_function(&client, 5000, MathRequest { a: 1, b: 2 }).await;
+        let end = Instant::now();
+        total_time += end.duration_since(start).as_millis();
+        println!("{:?}", end.duration_since(start))
+    }
 
-    let start = Instant::now();
-    let result = test_function(&client, 5000, MathRequest { a: 1, b: 2 }).await;
-    let end = Instant::now();
-    println!("Result: {:?}", result);
-    println!("Time: {:?}", end.duration_since(start));
+    println!("Avg time taken: {:?}", total_time);
 }

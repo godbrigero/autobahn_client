@@ -27,9 +27,14 @@ class RPCFunctionInfo:
     original_function: Callable
 
 
+SPECIAL_RPC_PREFIX_BASE = "RPC/FUNCTIONAL_SERVICE/"
+SPECIAL_RPC_PREFIX_OUTPUT = f"{SPECIAL_RPC_PREFIX_BASE}OUTPUT/"
+GLOBAL_RPC_FUNCTIONS: list[RPCFunctionInfo] = []
+
+
 async def init_rpc_services(client: "Autobahn") -> None:
     """Initialize RPC service subscriptions."""
-    for service_info in client._global_rpc_functions:
+    for service_info in GLOBAL_RPC_FUNCTIONS:
 
         # Create a proper closure to capture the current service info
         async def create_rpc_callback(handler: Callable, msg_type: type, svc_name: str):
@@ -56,7 +61,7 @@ async def init_rpc_services(client: "Autobahn") -> None:
                                     payload=f"Failed to deserialize input: {str(e)}".encode(),
                                 )
                                 await client.publish(
-                                    f"{client.special_rpc_prefix_output}{rpc_message.call_id}",
+                                    f"{SPECIAL_RPC_PREFIX_OUTPUT}{rpc_message.call_id}",
                                     error_response.SerializeToString(),
                                 )
                                 return
@@ -85,7 +90,7 @@ async def init_rpc_services(client: "Autobahn") -> None:
                                     response.payload = f"RPC function returned invalid type: {type(result)}".encode()
 
                             await client.publish(
-                                f"{Autobahn.special_rpc_prefix_output}{rpc_message.call_id}",
+                                f"{SPECIAL_RPC_PREFIX_OUTPUT}{rpc_message.call_id}",
                                 response.SerializeToString(),
                             )
 
@@ -101,7 +106,7 @@ async def init_rpc_services(client: "Autobahn") -> None:
                             )
                             try:
                                 await client.publish(
-                                    f"{Autobahn.special_rpc_prefix_output}{rpc_message.call_id}",
+                                    f"{SPECIAL_RPC_PREFIX_OUTPUT}{rpc_message.call_id}",
                                     error_response.SerializeToString(),
                                 )
                             except Exception as pub_error:
@@ -174,9 +179,7 @@ T = TypeVar("T", bound=Union[_message.Message, None])
 R = TypeVar("R", bound=Union[_message.Message, None])
 
 
-@classmethod
 def rpc_callable(
-    cls,
     timeout_ms: float = 3000.0,
 ):
     """Decorator to create RPC client calls.
@@ -209,7 +212,7 @@ def rpc_callable(
                 raise ConnectionError("WebSocket not connected. Call begin() first.")
 
             call_id = str(uuid.uuid4())
-            response_topic = f"{cls.special_rpc_prefix_output}{call_id}"
+            response_topic = f"{SPECIAL_RPC_PREFIX_OUTPUT}{call_id}"
 
             try:
                 serialized_message = (
@@ -277,7 +280,9 @@ def rpc_callable(
 
                 try:
                     # Publish request
-                    request_topic = f"{cls.special_rpc_prefix_base}{from_function_to_rpc_name(func)}"
+                    request_topic = (
+                        f"{SPECIAL_RPC_PREFIX_BASE}{from_function_to_rpc_name(func)}"
+                    )
                     await autobahn_instance.publish(
                         request_topic, rpc_message.SerializeToString()
                     )

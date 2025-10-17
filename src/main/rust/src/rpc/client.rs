@@ -86,13 +86,11 @@ impl Autobahn {
 
         match response.response_type {
             x if x == RpcResponseType::RpcResponseSuccess as i32 => {
-                // prost::Message::decode expects something that implements Buf, so use &[u8]
                 return deserialize_partial(&*response.payload).map_err(|e| {
                     RPCError::DeserializationError(format!("Failed to decode response: {}", e))
                 });
             }
             x if x == RpcResponseType::RpcResponseError as i32 => {
-                // Vec<u8> does not implement Display, so use debug formatting
                 return Err(RPCError::ErrorResponse(format!(
                     "RPC error response: {:?}",
                     response.payload
@@ -114,6 +112,4 @@ impl Autobahn {
     fn from_function_id_to_rpc_publish_topic(&self, fn_rpc_id: &str) -> String {
         format!("{}{}", AUTOBAHN_RPC_PREFIX, fn_rpc_id)
     }
-
-    // Note: we no longer use a polling-based waiter; subscription happens before publish.
 }

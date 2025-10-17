@@ -1,4 +1,4 @@
-protobuf>=6.31.1
+protobuf>=6.32.1
 websockets>=15.0.1
 asyncio>=3.4.3
 setuptools>=79.0.1

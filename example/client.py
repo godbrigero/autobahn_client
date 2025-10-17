@@ -3,12 +3,13 @@ from autobahn_client.client import Autobahn, Address
 import asyncio
 
 from autobahn_client.proto.message_pb2 import AbstractMessage, ServerForwardMessage
+from autobahn_client.rpc import rpc_callable
 
 
 # RPC function that is on the client side
 # The contents of the function do not matter, it is just a placeholder
 # and gets replaced by the "@Autobahn.rpc_callable()" decorator
-@Autobahn.rpc_callable()
+@rpc_callable()
 async def get_user(request: AbstractMessage) -> ServerForwardMessage:
     raise NotImplementedError()
 
