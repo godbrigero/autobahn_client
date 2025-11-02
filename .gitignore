@@ -35,5 +35,6 @@ bin/
 .gradle/
 
 # Added by cargo
-
+node_modules/
 /target
+

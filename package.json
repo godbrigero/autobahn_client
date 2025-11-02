@@ -1,0 +1,42 @@
+{
+  "name": "autobahn-client",
+  "version": "0.1.0",
+  "description": "A tiny TS library",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "",
+    "dev": "vitest",
+    "lint": "eslint .",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "keywords": [],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/godbrigero/autobahn_client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/godbrigero/autobahn_client/issues"
+  },
+  "homepage": "https://github.com/godbrigero/autobahn_client#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
