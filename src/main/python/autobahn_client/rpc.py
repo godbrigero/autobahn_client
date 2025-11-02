@@ -225,6 +225,8 @@ def rpc_callable(
                     payload=serialized_message,
                 )
 
+                # print(len(rpc_message.SerializeToString()))
+
                 response_future: asyncio.Future[R | None] = asyncio.Future()
 
                 async def response_handler(payload: bytes) -> None:

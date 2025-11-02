@@ -20,22 +20,24 @@ async def main():
 
     print("Server started")
     c = 0
+    total_time = 0
+    total_runs = 10
 
     while True:
         c += 1
 
-        if c > 2:
-            print(f"Sending to server: {c}")
-            time_start = time.time()
-            res = await get_user(server, AbstractMessage())
-            time_end = time.time()
-            print(f"Time taken: {(time_end - time_start) * 1000} ms")
-            if res is not None:
-                print(f"Response from server: '{res.payload.decode('utf-8')}'")
-            else:
-                print("No response from server")
+        # print(f"Sending to server: {c}")
+        time_start = time.time()
+        res = await get_user(server, AbstractMessage())
+        time_end = time.time()
+        # print(f"Time taken: {(time_end - time_start) * 1000} ms")
 
-        await asyncio.sleep(0.1)
+        total_time += time_end * 1000 - time_start * 1000
+
+        if c % total_runs == 0:
+            print(total_time / total_runs)
+            total_time = 0
+            await asyncio.sleep(1)
 
 
 if __name__ == "__main__":

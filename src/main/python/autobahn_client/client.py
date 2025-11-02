@@ -76,10 +76,7 @@ class Autobahn:
 
     async def __connect(self):
         websocket = await websockets.connect(
-            self.address.make_url(),
-            max_size=None,
-            max_queue=0,
-            write_limit=10,
+            self.address.make_url(), max_size=None, max_queue=0
         )
 
         self.websocket = websocket
