@@ -17,7 +17,7 @@ from autobahn_client.proto.message_pb2 import (
     TopicMessage,
 )
 import asyncio
-from autobahn_client.util import Address, get_remaining_capacity_ratio
+from autobahn_client.util import Address
 import logging
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class Autobahn:
         self.last_publish_time = time.time()
 
     async def __init_rpc_services(self) -> None:
-        await init_rpc_services(self)
+        await init_rpc_services(self)  # pyright: ignore[reportArgumentType]
 
     async def unsubscribe(self, topic: str) -> None:
         if self.websocket is None:
@@ -132,6 +132,10 @@ class Autobahn:
             raise ConnectionError("WebSocket not connected. Call begin() first.")
 
         if self.websocket is None:
+            logger.warning(
+                "Dropped publish message to topic %s because WebSocket is not connected",
+                topic,
+            )
             return
 
         message = PublishMessage(
@@ -147,10 +151,15 @@ class Autobahn:
             raise ConnectionError("WebSocket not connected. Call begin() first.")
 
         self.callbacks[topic] = callback
+        if self.websocket is None:
+            logger.warning(
+                "Dropped subscribe message to topic %s because WebSocket is not connected",
+                topic,
+            )
+            return
 
-        if self.websocket is not None:
-            message = TopicMessage(message_type=MessageType.SUBSCRIBE, topic=topic)
-            await self.websocket.send(message.SerializeToString())
+        message = TopicMessage(message_type=MessageType.SUBSCRIBE, topic=topic)
+        await self.websocket.send(message.SerializeToString())
 
     async def __listener(self):
         while True:
@@ -167,16 +176,18 @@ class Autobahn:
 
                 try:
                     message_proto = PublishMessage.FromString(message)
-                    if message_proto.message_type == MessageType.PUBLISH:
-                        if message_proto.topic in self.callbacks:
-                            try:
-                                await self.callbacks[message_proto.topic](
-                                    message_proto.payload
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Error in callback for topic {message_proto.topic}: {str(e)}"
-                                )
+                    if (
+                        message_proto.message_type == MessageType.PUBLISH
+                        and message_proto.topic in self.callbacks
+                    ):
+                        try:
+                            await self.callbacks[message_proto.topic](
+                                message_proto.payload
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Error in callback for topic {message_proto.topic}: {str(e)}"
+                            )
                 except Exception as e:
                     logger.error(f"Error parsing message: {str(e)}")
 
@@ -187,5 +198,6 @@ class Autobahn:
                 continue
             except Exception as e:
                 logger.error(f"Error in listener: {str(e)}")
+                await self.__on_connection_closed()
                 await asyncio.sleep(0.5)
                 continue

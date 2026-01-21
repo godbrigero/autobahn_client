@@ -65,36 +65,36 @@ public abstract class AutobahnRPC {
 
   /**
    * Creates a proxy implementation for an interface with @ClientFunction methods.
-   * This allows users to define only method signatures and get automatic RPC implementations.
+   * This allows users to define only method signatures and get automatic RPC
+   * implementations.
    *
-   * @param interfaceClass The interface class with @ClientFunction annotated methods
+   * @param interfaceClass The interface class with @ClientFunction annotated
+   *                       methods
    * @return A proxy implementation that makes RPC calls automatically
    */
   @SuppressWarnings("unchecked")
   public static <T> T createRPCClient(Class<T> interfaceClass) {
     if (!interfaceClass.isInterface()) {
       throw new IllegalArgumentException(
-        "Only interfaces are supported for RPC client generation"
-      );
+          "Only interfaces are supported for RPC client generation");
     }
 
     if (client == null) {
       throw new IllegalStateException(
-        "AutobahnClient not set. Call setAutobahnClient() first."
-      );
+          "AutobahnClient not set. Call setAutobahnClient() first.");
     }
 
     setupClientSubscriptions(interfaceClass);
 
     return (T) Proxy.newProxyInstance(
-      interfaceClass.getClassLoader(),
-      new Class<?>[] { interfaceClass },
-      new RPCInvocationHandler(interfaceClass)
-    );
+        interfaceClass.getClassLoader(),
+        new Class<?>[] { interfaceClass },
+        new RPCInvocationHandler(interfaceClass));
   }
 
   /**
-   * Sets up subscriptions for response handling for all @ClientFunction methods in an interface
+   * Sets up subscriptions for response handling for all @ClientFunction methods
+   * in an interface
    */
   private static void setupClientSubscriptions(Class<?> interfaceClass) {
     for (Method method : interfaceClass.getDeclaredMethods()) {
@@ -103,18 +103,16 @@ public abstract class AutobahnRPC {
 
         if (!subscribedTopics.contains(topic)) {
           client.subscribe(
-            topic,
-            NamedCallback.FromConsumer(message -> {
-              try {
-                onMessageClient(message);
-              } catch (InvalidProtocolBufferException e) {
-                System.err.println(
-                  "Failed to parse response message: " + e.getMessage()
-                );
-                e.printStackTrace();
-              }
-            })
-          );
+              topic,
+              NamedCallback.FromConsumer(message -> {
+                try {
+                  onMessageClient(message);
+                } catch (InvalidProtocolBufferException e) {
+                  System.err.println(
+                      "Failed to parse response message: " + e.getMessage());
+                  e.printStackTrace();
+                }
+              }));
 
           subscribedTopics.add(topic);
         }
@@ -135,7 +133,7 @@ public abstract class AutobahnRPC {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args)
-      throws Throwable {
+        throws Throwable {
       if (method.getDeclaringClass() == Object.class) {
         switch (method.getName()) {
           case "toString":
@@ -146,8 +144,7 @@ public abstract class AutobahnRPC {
             return System.identityHashCode(proxy);
           default:
             throw new UnsupportedOperationException(
-              "Method " + method.getName() + " not supported"
-            );
+                "Method " + method.getName() + " not supported");
         }
       }
 
@@ -155,8 +152,7 @@ public abstract class AutobahnRPC {
       ClientFunction annotation = method.getAnnotation(ClientFunction.class);
       if (annotation == null) {
         throw new UnsupportedOperationException(
-          "Method " + method.getName() + " must have @ClientFunction annotation"
-        );
+            "Method " + method.getName() + " must have @ClientFunction annotation");
       }
 
       // Validate method signature
@@ -164,9 +160,8 @@ public abstract class AutobahnRPC {
         checkMethodInputOutput(method);
       } catch (Exception e) {
         throw new RuntimeException(
-          "Invalid RPC method signature: " + method.getName(),
-          e
-        );
+            "Invalid RPC method signature: " + method.getName(),
+            e);
       }
 
       // Extract parameters
@@ -195,9 +190,8 @@ public abstract class AutobahnRPC {
         registerRPCService(clazz);
       } catch (Exception e) {
         throw new RuntimeException(
-          "Failed to register RPC service: " + clazz.getName(),
-          e
-        );
+            "Failed to register RPC service: " + clazz.getName(),
+            e);
       }
     }
   }
@@ -207,9 +201,9 @@ public abstract class AutobahnRPC {
     FunctionInfo infoInstance = new FunctionInfo(instance);
 
     for (Method method : Stream
-      .of(clazz.getDeclaredMethods())
-      .filter(AutobahnRPC::isRPCMethod)
-      .toList()) {
+        .of(clazz.getDeclaredMethods())
+        .filter(AutobahnRPC::isRPCMethod)
+        .toList()) {
       checkMethodInputOutput(method);
 
       String pubOrSubString = fromFunctionSignatureToPub(method);
@@ -226,56 +220,47 @@ public abstract class AutobahnRPC {
   }
 
   private static void handleClientFunction(
-    Method method,
-    FunctionInfo infoInstance,
-    String pubOrSubString
-  ) {
+      Method method,
+      FunctionInfo infoInstance,
+      String pubOrSubString) {
     ClientFunction annotation = method.getAnnotation(ClientFunction.class);
 
     long timeoutMs = annotation.timeoutMs();
     infoInstance.addClientMethod(
-      pubOrSubString,
-      new ClientInfo(timeoutMs, method)
-    );
+        pubOrSubString,
+        new ClientInfo(timeoutMs, method));
   }
 
   private static void handleServerFunction(
-    Method method,
-    FunctionInfo infoInstance,
-    String pubOrSubString
-  ) {
+      Method method,
+      FunctionInfo infoInstance,
+      String pubOrSubString) {
     infoInstance.addServerMethod(
-      pubOrSubString,
-      new ServerFunctionInfo(method)
-    );
+        pubOrSubString,
+        new ServerFunctionInfo(method));
 
     client.subscribe(
-      pubOrSubString,
-      NamedCallback.FromConsumer(message -> {
-        try {
-          onMessageServer(pubOrSubString, message);
-        } catch (InvalidProtocolBufferException e) {
-          throw new RuntimeException(
-            "Failed to parse request message: " + e.getMessage(),
-            e
-          );
-        }
-      })
-    );
+        pubOrSubString,
+        NamedCallback.FromConsumer(message -> {
+          try {
+            onMessageServer(pubOrSubString, message);
+          } catch (InvalidProtocolBufferException e) {
+            throw new RuntimeException(
+                "Failed to parse request message: " + e.getMessage(),
+                e);
+          }
+        }));
   }
 
   private static boolean isRPCMethod(Method m) {
-    return (
-      m.isAnnotationPresent(ServerFunction.class) ||
-      m.isAnnotationPresent(ClientFunction.class)
-    );
+    return (m.isAnnotationPresent(ServerFunction.class) ||
+        m.isAnnotationPresent(ClientFunction.class));
   }
 
   private static void onMessageServer(String topic, byte[] message)
-    throws InvalidProtocolBufferException {
+      throws InvalidProtocolBufferException {
     final RPCRequestMessage requestMessage = RPCRequestMessage.parseFrom(
-      message
-    );
+        message);
 
     FunctionInfo info = getFunctionInfo(topic);
     assert info != null;
@@ -290,21 +275,17 @@ public abstract class AutobahnRPC {
     if (!requestMessage.getPayload().isEmpty() && paramType != void.class) {
       try {
         Method parseFrom = paramType.getMethod("parseFrom", byte[].class);
-        inputMessage =
-          (GeneratedMessageV3) parseFrom.invoke(
+        inputMessage = (GeneratedMessageV3) parseFrom.invoke(
             null,
-            requestMessage.getPayload()
-          );
+            requestMessage.getPayload());
       } catch (
-        NoSuchMethodException
-        | SecurityException
-        | IllegalAccessException
-        | InvocationTargetException e
-      ) {
+          NoSuchMethodException
+          | SecurityException
+          | IllegalAccessException
+          | InvocationTargetException e) {
         throw new RuntimeException(
-          "Failed to parse input message: " + e.getMessage(),
-          e
-        );
+            "Failed to parse input message: " + e.getMessage(),
+            e);
       }
     } else {
       inputMessage = null;
@@ -312,32 +293,28 @@ public abstract class AutobahnRPC {
 
     new Thread(() -> {
       RPCResponseMessage.Builder responseMessage = RPCResponseMessage
-        .newBuilder()
-        .setMessageType(RPCMessageType.RPC_RESPONSE)
-        .setResponseType(RPCResponseType.RPC_RESPONSE_SUCCESS)
-        .setCallId(requestMessage.getCallId())
-        .setPayload(ByteString.EMPTY);
+          .newBuilder()
+          .setMessageType(RPCMessageType.RPC_RESPONSE)
+          .setResponseType(RPCResponseType.RPC_RESPONSE_SUCCESS)
+          .setCallId(requestMessage.getCallId())
+          .setPayload(ByteString.EMPTY);
 
       try {
         Object result = method.invoke(info.getServiceClass(), inputMessage);
 
         if (result instanceof GeneratedMessageV3) {
           responseMessage.setPayload(
-            ((GeneratedMessageV3) result).toByteString()
-          );
+              ((GeneratedMessageV3) result).toByteString());
         } else if (method.getReturnType() != void.class) {
           responseMessage.setResponseType(RPCResponseType.UNRECOGNIZED);
           responseMessage.setPayload(
-            ByteString.copyFromUtf8(
-              "ERROR WITH RETURN TYPE: " + method.getReturnType().getName()
-            )
-          );
+              ByteString.copyFromUtf8(
+                  "ERROR WITH RETURN TYPE: " + method.getReturnType().getName()));
         }
       } catch (
-        IllegalAccessException
-        | IllegalArgumentException
-        | InvocationTargetException e
-      ) {
+          IllegalAccessException
+          | IllegalArgumentException
+          | InvocationTargetException e) {
         responseMessage.setResponseType(RPCResponseType.RPC_RESPONSE_ERROR);
         responseMessage.setPayload(ByteString.copyFromUtf8(e.getMessage()));
         e.printStackTrace();
@@ -345,19 +322,17 @@ public abstract class AutobahnRPC {
 
       client.publish(topic, responseMessage.build().toByteArray()).join();
     })
-      .start();
+        .start();
   }
 
   private static void onMessageClient(byte[] message)
-    throws InvalidProtocolBufferException {
+      throws InvalidProtocolBufferException {
     final RPCResponseMessage responseMessage = RPCResponseMessage.parseFrom(
-      message
-    );
+        message);
 
     String callId = responseMessage.getCallId();
     CompletableFuture<RPCResponseMessage> pendingCall = pendingCalls.get(
-      callId
-    );
+        callId);
 
     if (pendingCall != null) {
       pendingCall.complete(responseMessage);
@@ -368,18 +343,17 @@ public abstract class AutobahnRPC {
 
   private static FunctionInfo getFunctionInfo(String topic) {
     return serviceInstances
-      .stream()
-      .filter(info -> info.getServerMethods().containsKey(topic))
-      .findFirst()
-      .orElse(null);
+        .stream()
+        .filter(info -> info.getServerMethods().containsKey(topic))
+        .findFirst()
+        .orElse(null);
   }
 
   private static void checkMethodInputOutput(Method method) throws Exception {
     Exception eToThrow = new Exception(
-      "The method " +
-      method.getName() +
-      " is not a valid RPC method since it must have no parameters or one parameter that is a protobuf message"
-    );
+        "The method " +
+            method.getName() +
+            " is not a valid RPC method since it must have no parameters or one parameter that is a protobuf message");
 
     // For interface methods, we don't require static/public modifiers
     if (!method.getDeclaringClass().isInterface()) {
@@ -396,17 +370,13 @@ public abstract class AutobahnRPC {
       throw eToThrow;
     }
 
-    if (
-      paramTypes.length == 1 &&
-      !GeneratedMessageV3.class.isAssignableFrom(paramTypes[0])
-    ) {
+    if (paramTypes.length == 1 &&
+        !GeneratedMessageV3.class.isAssignableFrom(paramTypes[0])) {
       throw eToThrow;
     }
 
-    if (
-      returnType != void.class &&
-      !GeneratedMessageV3.class.isAssignableFrom(returnType)
-    ) {
+    if (returnType != void.class &&
+        !GeneratedMessageV3.class.isAssignableFrom(returnType)) {
       throw eToThrow;
     }
   }
@@ -416,8 +386,8 @@ public abstract class AutobahnRPC {
 
     for (Class<?> paramType : method.getParameterTypes()) {
       sig
-        .append("_")
-        .append(fromJavaDefaultTypeToPython(paramType.getTypeName()));
+          .append("_")
+          .append(fromJavaDefaultTypeToPython(paramType.getTypeName()));
     }
 
     Class<?> ret = method.getReturnType();
@@ -455,10 +425,9 @@ public abstract class AutobahnRPC {
    * Internal method used by the proxy implementations.
    */
   private static void makeRPCCall(
-    String methodName,
-    GeneratedMessageV3 request,
-    long timeoutMs
-  ) throws Exception {
+      String methodName,
+      GeneratedMessageV3 request,
+      long timeoutMs) throws Exception {
     makeRPCCall(methodName, request, void.class, timeoutMs);
   }
 
@@ -468,15 +437,13 @@ public abstract class AutobahnRPC {
    */
   @SuppressWarnings("unchecked")
   private static <T> T makeRPCCall(
-    String methodName,
-    GeneratedMessageV3 request,
-    Class<T> responseType,
-    long timeoutMs
-  ) throws Exception {
+      String methodName,
+      GeneratedMessageV3 request,
+      Class<T> responseType,
+      long timeoutMs) throws Exception {
     if (client == null) {
       throw new IllegalStateException(
-        "AutobahnClient not set. Call setAutobahnClient() first."
-      );
+          "AutobahnClient not set. Call setAutobahnClient() first.");
     }
 
     // Generate unique call ID
@@ -484,9 +451,9 @@ public abstract class AutobahnRPC {
 
     // Build the RPC request message
     RPCRequestMessage.Builder requestBuilder = RPCRequestMessage
-      .newBuilder()
-      .setMessageType(RPCMessageType.RPC_REQUEST)
-      .setCallId(callId);
+        .newBuilder()
+        .setMessageType(RPCMessageType.RPC_REQUEST)
+        .setCallId(callId);
 
     if (request != null) {
       requestBuilder.setPayload(request.toByteString());
@@ -502,10 +469,9 @@ public abstract class AutobahnRPC {
 
     // Generate the topic name (same logic as server side)
     String topic = generateTopicName(
-      methodName,
-      request != null ? request.getClass() : null,
-      responseType
-    );
+        methodName,
+        request != null ? request.getClass() : null,
+        responseType);
 
     try {
       // Publish the request
@@ -513,9 +479,8 @@ public abstract class AutobahnRPC {
 
       // Wait for response with timeout
       RPCResponseMessage response = responseFuture.get(
-        timeoutMs,
-        TimeUnit.MILLISECONDS
-      );
+          timeoutMs,
+          TimeUnit.MILLISECONDS);
 
       // Check if the response indicates success
       if (response.getResponseType() != RPCResponseType.RPC_RESPONSE_SUCCESS) {
@@ -532,9 +497,8 @@ public abstract class AutobahnRPC {
       return (T) parseFrom.invoke(null, response.getPayload().toByteArray());
     } catch (TimeoutException e) {
       throw new RuntimeException(
-        "RPC call timed out after " + timeoutMs + "ms",
-        e
-      );
+          "RPC call timed out after " + timeoutMs + "ms",
+          e);
     } finally {
       // Clean up pending call
       pendingCalls.remove(callId);
@@ -546,16 +510,15 @@ public abstract class AutobahnRPC {
    * This should match the logic used by the server side.
    */
   private static String generateTopicName(
-    String methodName,
-    Class<?> paramType,
-    Class<?> returnType
-  ) {
+      String methodName,
+      Class<?> paramType,
+      Class<?> returnType) {
     StringBuilder sig = new StringBuilder(methodName);
 
     if (paramType != null) {
       sig
-        .append("_")
-        .append(fromJavaDefaultTypeToPython(paramType.getTypeName()));
+          .append("_")
+          .append(fromJavaDefaultTypeToPython(paramType.getTypeName()));
     }
 
     String pyRet = fromJavaDefaultTypeToPython(returnType.getTypeName());
