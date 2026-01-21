@@ -243,7 +243,6 @@ public class AutobahnClient {
 
       if (messageProto.getMessageType() == MessageType.PUBLISH) {
         String topic = messageProto.getTopic();
-        System.out.println("Received publish message for topic: " + topic);
         if (callbacks.containsKey(topic)) {
           callbacks
               .get(topic)
