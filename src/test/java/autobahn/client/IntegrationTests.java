@@ -36,7 +36,7 @@ import proto.autobahn.Message.PublishMessage;
 @ExtendWith(MockitoExtension.class)
 public class IntegrationTests {
 
-  private static final boolean SHOULD_CONNECT = false;
+  private static final boolean SHOULD_CONNECT = true;
 
   @Mock
   private ScheduledExecutorService mockExecutor;
@@ -180,6 +180,103 @@ public class IntegrationTests {
     assertEquals(testOutputList.size(), 2);
     assertEquals(testOutputList.get(0), 11);
     assertEquals(testOutputList.get(1), 12);
+  }
+
+  /**
+   * The server pushes heartbeats about every second ({@code SLEEP_TIME} in the
+   * Rust server); the
+   * client handles {@code HEARTBEAT} by sending a reply that lists current topics
+   * (private
+   * {@code sendHeartbeat()}). That re-registers interest on the
+   * server if a SUBSCRIBE was lost.
+   * <p>
+   * Here we only add local callbacks (no {@code SUBSCRIBE} frame) to simulate a
+   * dropped subscribe
+   * packet (callback registered locally, upstream send failed), then invoke
+   * {@code sendHeartbeat}
+   * via reflection — the same method the client runs when a server heartbeat
+   * arrives — so the test
+   * is deterministic and does not rely on wall-clock timing.
+   * </p>
+   *
+   * @apiNote Requires the Autobahn server on localhost:8080.
+   */
+  @DisplayName("Heartbeat reply registers topics when subscribe was not sent")
+  @Test
+  void testHeartbeatResubscribesTopicsWhenSubscribeNotSent() throws Exception {
+    if (!SHOULD_CONNECT) {
+      return;
+    }
+
+    client.begin().join();
+
+    String topic = "heartbeat_safeguard/dropped_subscribe";
+    ArrayList<Integer> received = new ArrayList<>();
+
+    java.lang.reflect.Field callbacksField = AutobahnClient.class.getDeclaredField("callbacks");
+    callbacksField.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    Map<String, List<NamedCallback>> callbacksMap = (Map<String, List<NamedCallback>>) callbacksField.get(client);
+    callbacksMap.putIfAbsent(topic, new ArrayList<>());
+    callbacksMap.get(topic).add(NamedCallback.FromConsumer((byte[] data) -> received.add((int) data[0])));
+
+    java.lang.reflect.Method sendHeartbeat = AutobahnClient.class.getDeclaredMethod("sendHeartbeat");
+    sendHeartbeat.setAccessible(true);
+    sendHeartbeat.invoke(client);
+
+    Thread.sleep(50);
+
+    client.publish(topic, new byte[] { 42 }).join();
+    Thread.sleep(100);
+
+    assertEquals(1, received.size(), "heartbeat-driven registration should deliver publishes");
+    assertEquals(42, received.get(0));
+  }
+
+  /**
+   * Same scenario as
+   * {@link #testHeartbeatResubscribesTopicsWhenSubscribeNotSent}: local
+   * subscription state (callbacks) without a successful {@code SUBSCRIBE}
+   * upstream — simulating a
+   * dropped or failed subscribe send. This variant waits several seconds so real
+   * server heartbeats
+   * (~1s apart) arrive; the client answers each with a heartbeat listing
+   * subscribed topics, which
+   * should register delivery without relying on reflection.
+   *
+   * @apiNote Requires the Autobahn server on localhost:8080 (must emit periodic
+   *          heartbeats).
+   */
+  @DisplayName("Dropped subscribe recovered when server heartbeats arrive (no reflection)")
+  @Test
+  void testDroppedSubscribeRecoveredByIncomingServerHeartbeats() throws Exception {
+    if (!SHOULD_CONNECT) {
+      return;
+    }
+
+    client.begin().join();
+
+    String topic = "heartbeat_safeguard/dropped_subscribe_e2e";
+    ArrayList<Integer> received = new ArrayList<>();
+
+    java.lang.reflect.Field callbacksField = AutobahnClient.class.getDeclaredField("callbacks");
+    callbacksField.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    Map<String, List<NamedCallback>> callbacksMap = (Map<String, List<NamedCallback>>) callbacksField.get(client);
+    callbacksMap.putIfAbsent(topic, new ArrayList<>());
+    callbacksMap.get(topic).add(NamedCallback.FromConsumer((byte[] data) -> received.add((int) data[0])));
+
+    // Server heartbeat loop sleeps 1s between rounds; wait long enough for at least
+    // one inbound HB
+    // so handleMessage(HEARTBEAT) -> sendHeartbeat() runs without calling it via
+    // reflection.
+    Thread.sleep(1500);
+
+    client.publish(topic, new byte[] { 99 }).join();
+    Thread.sleep(150);
+
+    assertEquals(1, received.size(), "server heartbeats should re-register topics after dropped subscribe");
+    assertEquals(99, received.get(0));
   }
 
   @DisplayName("AutobahnClient Constructor")

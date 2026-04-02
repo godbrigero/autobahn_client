@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 public class TimeTests {
     private static final String topic = "test";
     private static final int numberOfMessages = 1000;
-    private static final boolean shouldConnect = false;
+    private static final boolean shouldConnect = true;
 
     private static byte[] generateRandomBytes(int size) {
         byte[] bytes = new byte[size];

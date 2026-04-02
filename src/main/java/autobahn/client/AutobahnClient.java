@@ -2,6 +2,7 @@ package autobahn.client;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
@@ -18,6 +20,8 @@ import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.ByteString;
 
+import proto.autobahn.Message.AbstractMessage;
+import proto.autobahn.Message.HeartbeatMessage;
 import proto.autobahn.Message.MessageType;
 import proto.autobahn.Message.PublishMessage;
 import proto.autobahn.Message.TopicMessage;
@@ -25,13 +29,16 @@ import proto.autobahn.Message.UnsubscribeMessage;
 
 public class AutobahnClient {
 
+  private static final Duration RECONNECT_DELAY = Duration.ofMillis(5000);
+  private static final Duration MAX_CONNECT_TIME = Duration.ofMillis(500);
+
   private final Address address;
-  private WebSocketClient websocket;
   private final Map<String, List<NamedCallback>> callbacks;
   private final ScheduledExecutorService reconnectExecutor;
-  private boolean isReconnecting = false;
-  private static final int RECONNECT_DELAY_MS = 5000;
   private final Logger logger;
+
+  private WebSocketClient websocket;
+  private boolean isReconnecting;
 
   public AutobahnClient(Address address) {
     this(
@@ -54,6 +61,7 @@ public class AutobahnClient {
     this.callbacks = callbacks;
     this.reconnectExecutor = reconnectExecutor;
     this.logger = loggerClass;
+    this.isReconnecting = false;
   }
 
   private void scheduleReconnect() {
@@ -64,7 +72,7 @@ public class AutobahnClient {
     isReconnecting = true;
     reconnectExecutor.schedule(
         this::tryReconnect,
-        RECONNECT_DELAY_MS,
+        RECONNECT_DELAY.toMillis(),
         TimeUnit.MILLISECONDS);
   }
 
@@ -96,10 +104,13 @@ public class AutobahnClient {
 
   public CompletableFuture<Void> begin() {
     return CompletableFuture.runAsync(() -> {
+      AtomicBoolean isConnected = new AtomicBoolean(false);
+      long startTime = System.currentTimeMillis();
       try {
         websocket = new WebSocketClient(new URI(address.makeUrl())) {
           @Override
           public void onOpen(ServerHandshake handshake) {
+            isConnected.set(true);
           }
 
           @Override
@@ -126,6 +137,17 @@ public class AutobahnClient {
           }
         };
         websocket.connect();
+
+        while (!isConnected.get() && System.currentTimeMillis() - startTime < MAX_CONNECT_TIME.toMillis()) {
+          try {
+            Thread.sleep(10);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            break;
+          }
+        }
+
+        logger.info("Time taken to connect: " + (System.currentTimeMillis() - startTime) + "ms");
       } catch (Exception e) {
         logger.error("Failed to connect: " + e.getMessage());
         throw new RuntimeException("Failed to connect to WebSocket address");
@@ -238,19 +260,53 @@ public class AutobahnClient {
   }
 
   private void handleMessage(byte[] messageBytes) {
+    AbstractMessage abstractMessage;
     try {
-      PublishMessage messageProto = PublishMessage.parseFrom(messageBytes);
+      abstractMessage = AbstractMessage.parseFrom(messageBytes);
+    } catch (Exception e) {
+      logger.error("Error parsing abstract message: " + e.getMessage());
+      return;
+    }
 
-      if (messageProto.getMessageType() == MessageType.PUBLISH) {
-        String topic = messageProto.getTopic();
-        if (callbacks.containsKey(topic)) {
-          callbacks
-              .get(topic)
-              .forEach(callback -> callback.accept(messageProto.getPayload().toByteArray()));
-        }
-      }
+    switch (abstractMessage.getMessageType()) {
+      case HEARTBEAT:
+        // Ignore payload and just respond with a heartbeat message
+        sendHeartbeat();
+        break;
+      case PUBLISH:
+        onPublishMessage(messageBytes);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private void onPublishMessage(byte[] messageBytes) {
+    PublishMessage pubMessage;
+    try {
+      pubMessage = PublishMessage.parseFrom(messageBytes);
     } catch (Exception e) {
       logger.error("Error in message handler: " + e.getMessage());
+      return;
     }
+
+    String topic = pubMessage.getTopic();
+    callbacks.getOrDefault(topic, new ArrayList<>())
+        .forEach(callback -> callback.accept(pubMessage.getPayload().toByteArray()));
+  }
+
+  private void sendHeartbeat() {
+    if (websocket == null || websocket.isClosed()) {
+      throw new IllegalStateException(
+          "No WebSocket connection available. Call begin() first.");
+    }
+
+    HeartbeatMessage heartbeatMessage = HeartbeatMessage
+        .newBuilder()
+        .setMessageType(MessageType.HEARTBEAT)
+        .addAllTopics(callbacks.keySet())
+        .build();
+
+    websocket.send(heartbeatMessage.toByteArray());
   }
 }

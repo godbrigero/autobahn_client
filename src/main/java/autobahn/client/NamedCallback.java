@@ -27,4 +27,15 @@ public abstract class NamedCallback implements Consumer<byte[]> {
     }
     return false;
   }
+
+  @Override
+  public int hashCode() {
+    return code.hashCode();
+  }
+
+  @Override
+  public String toString() {
+    return "NamedCallback[code=" + code + "]";
+  }
+
 }

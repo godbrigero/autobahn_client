@@ -8,6 +8,7 @@ enum MessageType {
   PUBLISH = 2;
   SUBSCRIBE = 3;
   UNSUBSCRIBE = 4;
+  HEARTBEAT = 5;
 }
 
 message AbstractMessage {
@@ -70,4 +71,10 @@ message RPCResponseMessage {
 }
 
 message RPCEmpty {
+}
+
+message HeartbeatMessage {
+  MessageType message_type = 1;
+  optional string uuid = 2;
+  repeated string topics = 3;
 }
