@@ -21,7 +21,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "",
+    "test": "vitest run",
     "dev": "vitest",
     "lint": "eslint .",
     "prepublishOnly": "npm run typecheck && npm run build"

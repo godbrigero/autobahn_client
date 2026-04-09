@@ -14,6 +14,7 @@ class MessageType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PUBLISH: _ClassVar[MessageType]
     SUBSCRIBE: _ClassVar[MessageType]
     UNSUBSCRIBE: _ClassVar[MessageType]
+    HEARTBEAT: _ClassVar[MessageType]
 
 class RPCMessageType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -29,19 +30,20 @@ SERVER_FORWARD: MessageType
 PUBLISH: MessageType
 SUBSCRIBE: MessageType
 UNSUBSCRIBE: MessageType
+HEARTBEAT: MessageType
 RPC_REQUEST: RPCMessageType
 RPC_RESPONSE: RPCMessageType
 RPC_RESPONSE_SUCCESS: RPCResponseType
 RPC_RESPONSE_ERROR: RPCResponseType
 
 class AbstractMessage(_message.Message):
-    __slots__ = ("message_type",)
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     message_type: MessageType
     def __init__(self, message_type: _Optional[_Union[MessageType, str]] = ...) -> None: ...
 
 class ServerStateMessage(_message.Message):
-    __slots__ = ("message_type", "uuid", "topics")
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     UUID_FIELD_NUMBER: _ClassVar[int]
     TOPICS_FIELD_NUMBER: _ClassVar[int]
@@ -51,7 +53,7 @@ class ServerStateMessage(_message.Message):
     def __init__(self, message_type: _Optional[_Union[MessageType, str]] = ..., uuid: _Optional[str] = ..., topics: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ServerForwardMessage(_message.Message):
-    __slots__ = ("message_type", "payload")
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     PAYLOAD_FIELD_NUMBER: _ClassVar[int]
     message_type: MessageType
@@ -59,7 +61,7 @@ class ServerForwardMessage(_message.Message):
     def __init__(self, message_type: _Optional[_Union[MessageType, str]] = ..., payload: _Optional[bytes] = ...) -> None: ...
 
 class TopicMessage(_message.Message):
-    __slots__ = ("message_type", "topic")
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     TOPIC_FIELD_NUMBER: _ClassVar[int]
     message_type: MessageType
@@ -67,7 +69,7 @@ class TopicMessage(_message.Message):
     def __init__(self, message_type: _Optional[_Union[MessageType, str]] = ..., topic: _Optional[str] = ...) -> None: ...
 
 class PublishMessage(_message.Message):
-    __slots__ = ("message_type", "topic", "payload")
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     TOPIC_FIELD_NUMBER: _ClassVar[int]
     PAYLOAD_FIELD_NUMBER: _ClassVar[int]
@@ -77,7 +79,7 @@ class PublishMessage(_message.Message):
     def __init__(self, message_type: _Optional[_Union[MessageType, str]] = ..., topic: _Optional[str] = ..., payload: _Optional[bytes] = ...) -> None: ...
 
 class UnsubscribeMessage(_message.Message):
-    __slots__ = ("message_type", "topic")
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     TOPIC_FIELD_NUMBER: _ClassVar[int]
     message_type: MessageType
@@ -85,7 +87,7 @@ class UnsubscribeMessage(_message.Message):
     def __init__(self, message_type: _Optional[_Union[MessageType, str]] = ..., topic: _Optional[str] = ...) -> None: ...
 
 class RPCMessage(_message.Message):
-    __slots__ = ("message_type", "call_id")
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     CALL_ID_FIELD_NUMBER: _ClassVar[int]
     message_type: RPCMessageType
@@ -93,7 +95,7 @@ class RPCMessage(_message.Message):
     def __init__(self, message_type: _Optional[_Union[RPCMessageType, str]] = ..., call_id: _Optional[str] = ...) -> None: ...
 
 class RPCRequestMessage(_message.Message):
-    __slots__ = ("message_type", "call_id", "payload")
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     CALL_ID_FIELD_NUMBER: _ClassVar[int]
     PAYLOAD_FIELD_NUMBER: _ClassVar[int]
@@ -103,7 +105,7 @@ class RPCRequestMessage(_message.Message):
     def __init__(self, message_type: _Optional[_Union[RPCMessageType, str]] = ..., call_id: _Optional[str] = ..., payload: _Optional[bytes] = ...) -> None: ...
 
 class RPCResponseMessage(_message.Message):
-    __slots__ = ("message_type", "call_id", "response_type", "payload")
+    __slots__ = ()
     MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
     CALL_ID_FIELD_NUMBER: _ClassVar[int]
     RESPONSE_TYPE_FIELD_NUMBER: _ClassVar[int]
@@ -117,3 +119,13 @@ class RPCResponseMessage(_message.Message):
 class RPCEmpty(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class HeartbeatMessage(_message.Message):
+    __slots__ = ()
+    MESSAGE_TYPE_FIELD_NUMBER: _ClassVar[int]
+    UUID_FIELD_NUMBER: _ClassVar[int]
+    TOPICS_FIELD_NUMBER: _ClassVar[int]
+    message_type: MessageType
+    uuid: str
+    topics: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, message_type: _Optional[_Union[MessageType, str]] = ..., uuid: _Optional[str] = ..., topics: _Optional[_Iterable[str]] = ...) -> None: ...

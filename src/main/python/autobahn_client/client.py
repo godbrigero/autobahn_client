@@ -8,10 +8,11 @@ from typing import (
     Optional,
     Union,
 )
-from autobahn_client.loop import AsyncLoopThread
 from autobahn_client.rpc import RPCFunctionInfo, init_rpc_services
 import websockets
 from autobahn_client.proto.message_pb2 import (
+    AbstractMessage,
+    HeartbeatMessage,
     MessageType,
     PublishMessage,
     TopicMessage,
@@ -53,7 +54,7 @@ class Autobahn:
 
         try:
             message = TopicMessage(message_type=MessageType.UNSUBSCRIBE, topic=topic)
-            await self.websocket.send(message.SerializeToString())
+            await self._send_raw(message.SerializeToString())
         except Exception as e:
             logger.error(
                 f"Failed to send unsubscribe message for topic {topic}: {str(e)}"
@@ -95,18 +96,14 @@ class Autobahn:
                 if self.websocket is None:
                     try:
                         self.websocket = await self.__connect()
-
                         logger.info("Reconnected to WebSocket")
-
-                        if self.websocket is not None:
-                            for topic in self.callbacks.keys():
-                                message = TopicMessage(
-                                    message_type=MessageType.SUBSCRIBE, topic=topic
-                                )
-
-                                await self.websocket.send(message.SerializeToString())
+                        for topic in self.callbacks:
+                            msg = TopicMessage(
+                                message_type=MessageType.SUBSCRIBE, topic=topic
+                            )
+                            await self._send_raw(msg.SerializeToString())
                     except Exception as e:
-                        logger.warning(f"Reconnection failed: {str(e)}")
+                        logger.warning(f"Reconnection failed: {e}")
                         await self.__on_connection_closed()
                 else:
                     try:
@@ -114,11 +111,9 @@ class Autobahn:
                     except websockets.exceptions.ConnectionClosed:
                         logger.warning("WebSocket connection lost")
                         await self.__on_connection_closed()
-
                 await asyncio.sleep(self.reconnect_interval_seconds)
-
             except Exception as e:
-                logger.error(f"Error in connection maintenance: {str(e)}")
+                logger.error(f"Error in connection maintenance: {e}")
                 await asyncio.sleep(self.reconnect_interval_seconds)
 
     async def ping(self) -> None:
@@ -142,7 +137,7 @@ class Autobahn:
             message_type=MessageType.PUBLISH, topic=topic, payload=payload
         )
 
-        await self.websocket.send(message.SerializeToString())
+        await self._send_raw(message.SerializeToString())
 
     async def subscribe(
         self, topic: str, callback: Callable[[bytes], Awaitable[None]]
@@ -159,7 +154,26 @@ class Autobahn:
             return
 
         message = TopicMessage(message_type=MessageType.SUBSCRIBE, topic=topic)
-        await self.websocket.send(message.SerializeToString())
+        await self._send_raw(message.SerializeToString())
+
+    async def _send_raw(self, message: bytes) -> None:
+        """
+        Overridable method to send raw messages to the WebSocket.
+        """
+
+        if self.websocket is None:
+            raise ConnectionError("WebSocket not connected. Call begin() first.")
+
+        return await self.websocket.send(message)
+
+    async def send_heartbeat(self) -> None:
+        if self.websocket is None:
+            raise ConnectionError("WebSocket not connected. Call begin() first.")
+
+        message = HeartbeatMessage(
+            message_type=MessageType.HEARTBEAT, topics=list(self.callbacks.keys())
+        )
+        await self._send_raw(message.SerializeToString())
 
     async def __listener(self):
         while True:
@@ -174,12 +188,14 @@ class Autobahn:
                     logger.warning(f"Received unexpected string message: {message}")
                     continue
 
-                try:
-                    message_proto = PublishMessage.FromString(message)
-                    if (
-                        message_proto.message_type == MessageType.PUBLISH
-                        and message_proto.topic in self.callbacks
-                    ):
+                generic_message = AbstractMessage.FromString(message)
+
+                match generic_message.message_type:
+                    case MessageType.PUBLISH:
+                        message_proto = PublishMessage.FromString(message)
+                        if message_proto.topic not in self.callbacks:
+                            continue
+
                         try:
                             await self.callbacks[message_proto.topic](
                                 message_proto.payload
@@ -188,8 +204,9 @@ class Autobahn:
                             logger.error(
                                 f"Error in callback for topic {message_proto.topic}: {str(e)}"
                             )
-                except Exception as e:
-                    logger.error(f"Error parsing message: {str(e)}")
+
+                    case MessageType.HEARTBEAT:
+                        await self.send_heartbeat()
 
             except websockets.exceptions.ConnectionClosed:
                 logger.info("WebSocket connection closed, waiting for reconnection...")

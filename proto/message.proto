@@ -75,6 +75,6 @@ message RPCEmpty {
 
 message HeartbeatMessage {
   MessageType message_type = 1;
-  optional string uuid = 2;
+  string uuid = 2;
   repeated string topics = 3;
 }

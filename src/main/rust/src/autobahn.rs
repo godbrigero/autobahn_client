@@ -8,6 +8,7 @@ use tokio::sync::{watch, Mutex};
 use tokio::time;
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 
+use crate::proto::autobahn::{AbstractMessage, HeartbeatMessage};
 use crate::{
     proto::autobahn::{MessageType, PublishMessage, TopicMessage},
     rpc::server::initialize_rpc_server,
@@ -92,6 +93,28 @@ impl Autobahn {
         Ok(ws_stream)
     }
 
+    async fn send_heartbeat(self: &Arc<Self>) -> Result<(), Box<dyn std::error::Error>> {
+        let mut write_lock = self.write.lock().await;
+        let topics = self
+            .callbacks
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<String>>();
+        if let Some(writer) = write_lock.as_mut() {
+            let msg = HeartbeatMessage {
+                message_type: MessageType::Heartbeat as i32,
+                uuid: "".to_string(),
+                topics,
+            };
+            writer
+                .send(WsMessage::Binary(msg.encode_to_vec().into()))
+                .await?;
+        }
+        Ok(())
+    }
+
     pub async fn begin(self: &Arc<Self>) -> Result<(), Box<dyn std::error::Error>> {
         // Guard against multiple starts
         {
@@ -117,11 +140,15 @@ impl Autobahn {
                         let _ = self.connection_tx.send(true);
 
                         let callbacks = self.callbacks.clone();
+                        let self_clone = self.clone();
                         tokio::spawn(async move {
                             while let Some(msg) = read.next().await {
                                 if let Ok(WsMessage::Binary(msg)) = msg {
-                                    if let Ok(publish_msg) = PublishMessage::decode(&msg[..]) {
-                                        if publish_msg.message_type == MessageType::Publish as i32 {
+                                    let generic_msg = AbstractMessage::decode(&msg[..]).unwrap();
+                                    match MessageType::try_from(generic_msg.message_type) {
+                                        Ok(MessageType::Publish) => {
+                                            let publish_msg =
+                                                PublishMessage::decode(&msg[..]).unwrap();
                                             let callbacks = callbacks.lock().await;
                                             if let Some(callback) =
                                                 callbacks.get(&publish_msg.topic)
@@ -132,6 +159,15 @@ impl Autobahn {
                                                     callback(payload).await;
                                                 });
                                             }
+                                        }
+                                        Ok(MessageType::Heartbeat) => {
+                                            let _ = self_clone.send_heartbeat().await;
+                                        }
+                                        _ => {
+                                            eprintln!(
+                                                "Received unexpected message type: {}",
+                                                generic_msg.message_type
+                                            );
                                         }
                                     }
                                 }
@@ -371,9 +407,133 @@ impl Autobahn {
 
 #[cfg(test)]
 mod tests {
+    use tokio::net::TcpListener;
+    use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
     use tokio::time::sleep;
+    use tokio::time::timeout;
+    use tokio_tungstenite::accept_async;
+    use tokio_tungstenite::tungstenite::Message as WsMessage;
 
     use super::*;
+
+    async fn spawn_test_server() -> (
+        Address,
+        UnboundedReceiver<Vec<u8>>,
+        UnboundedSender<Vec<u8>>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (client_messages_tx, client_messages_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (server_messages_tx, mut server_messages_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let websocket = accept_async(stream).await.unwrap();
+            let (mut write, mut read) = websocket.split();
+
+            let read_task = tokio::spawn(async move {
+                while let Some(message) = read.next().await {
+                    match message.unwrap() {
+                        WsMessage::Binary(bytes) => {
+                            let _ = client_messages_tx.send(bytes.to_vec());
+                        }
+                        WsMessage::Close(_) => break,
+                        _ => {}
+                    }
+                }
+            });
+
+            while let Some(message) = server_messages_rx.recv().await {
+                if write.send(WsMessage::Binary(message.into())).await.is_err() {
+                    break;
+                }
+            }
+
+            read_task.abort();
+        });
+
+        (
+            Address::new("127.0.0.1", port),
+            client_messages_rx,
+            server_messages_tx,
+            server,
+        )
+    }
+
+    async fn receive_binary(receiver: &mut UnboundedReceiver<Vec<u8>>) -> Vec<u8> {
+        timeout(Duration::from_secs(1), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    async fn receive_heartbeat(receiver: &mut UnboundedReceiver<Vec<u8>>) -> HeartbeatMessage {
+        loop {
+            let bytes = receive_binary(receiver).await;
+            let abstract_message = AbstractMessage::decode(&bytes[..]).unwrap();
+            if MessageType::try_from(abstract_message.message_type).unwrap()
+                == MessageType::Heartbeat
+            {
+                return HeartbeatMessage::decode(&bytes[..]).unwrap();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_send_heartbeat_includes_current_topics() {
+        let (address, mut client_messages, server_messages, server) = spawn_test_server().await;
+        let autobahn = Autobahn::new(address, false, 0.1);
+
+        autobahn.begin().await.unwrap();
+        autobahn
+            .subscribe("heartbeat/direct", |_| async {})
+            .await
+            .unwrap();
+
+        let subscribe =
+            TopicMessage::decode(&receive_binary(&mut client_messages).await[..]).unwrap();
+        assert_eq!(subscribe.message_type, MessageType::Subscribe as i32);
+        assert_eq!(subscribe.topic, "heartbeat/direct");
+
+        autobahn.send_heartbeat().await.unwrap();
+
+        let heartbeat = receive_heartbeat(&mut client_messages).await;
+        assert_eq!(heartbeat.message_type, MessageType::Heartbeat as i32);
+        assert_eq!(heartbeat.topics, vec!["heartbeat/direct".to_string()]);
+
+        drop(server_messages);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn test_incoming_heartbeat_triggers_reply() {
+        let (address, mut client_messages, server_messages, server) = spawn_test_server().await;
+        let autobahn = Autobahn::new(address, false, 0.1);
+
+        autobahn.begin().await.unwrap();
+        autobahn
+            .subscribe("heartbeat/inbound", |_| async {})
+            .await
+            .unwrap();
+
+        let subscribe =
+            TopicMessage::decode(&receive_binary(&mut client_messages).await[..]).unwrap();
+        assert_eq!(subscribe.message_type, MessageType::Subscribe as i32);
+
+        let inbound = HeartbeatMessage {
+            message_type: MessageType::Heartbeat as i32,
+            uuid: "server".to_string(),
+            topics: Vec::new(),
+        };
+        server_messages.send(inbound.encode_to_vec()).unwrap();
+
+        let heartbeat = receive_heartbeat(&mut client_messages).await;
+        assert_eq!(heartbeat.topics, vec!["heartbeat/inbound".to_string()]);
+
+        drop(server_messages);
+        server.abort();
+    }
 
     #[tokio::test]
     async fn test_autobahn() {

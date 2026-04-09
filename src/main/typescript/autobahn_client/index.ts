@@ -1,5 +1,7 @@
 // src/lib/AutobahnClient.ts - Purpose: minimal pub/sub websocket client using protobuf frames
 import {
+  AbstractMessage,
+  HeartbeatMessage,
   MessageType,
   PublishMessage,
   TopicMessage,
@@ -86,17 +88,37 @@ export class AutobahnClient {
   private async handleMessage(evt: MessageEvent) {
     if (typeof evt.data === "string") return;
     const bytes = new Uint8Array(evt.data as ArrayBuffer);
-    let msg: PublishMessage;
+
     try {
-      msg = PublishMessage.decode(bytes);
+      const msg = AbstractMessage.decode(bytes);
+      if (msg.messageType === MessageType.HEARTBEAT) {
+        this.sendHeartbeat();
+        return;
+      }
+
+      if (msg.messageType !== MessageType.PUBLISH) {
+        return;
+      }
+
+      const publishMessage = PublishMessage.decode(bytes);
+      const cb = this.callbacks.get(publishMessage.topic);
+      if (cb) await cb(publishMessage.payload);
     } catch (e) {
-      console.error("Failed to decode PublishMessage", e);
+      console.error("Failed to decode websocket message", e);
+    }
+  }
+
+  private sendHeartbeat() {
+    if (this.ws?.readyState !== WebSocket.OPEN) {
       return;
     }
-    if (msg.messageType === MessageType.PUBLISH) {
-      const cb = this.callbacks.get(msg.topic);
-      if (cb) await cb(msg.payload);
-    }
+
+    const msg = HeartbeatMessage.create({
+      messageType: MessageType.HEARTBEAT,
+      topics: Array.from(this.callbacks.keys()),
+    });
+
+    this.ws.send(HeartbeatMessage.encode(msg).finish());
   }
 
   /** Subscribe to a topic; callback receives raw bytes */
