@@ -208,8 +208,8 @@ def rpc_callable(
 
         @functools.wraps(func)  # type: ignore[arg-type]
         async def rpc_caller(autobahn_instance: "Autobahn", message: T) -> R | None:
-            if autobahn_instance.websocket is None:
-                raise ConnectionError("WebSocket not connected. Call begin() first.")
+            if not autobahn_instance.is_connected():
+                raise ConnectionError("Transport not connected. Call begin() first.")
 
             call_id = str(uuid.uuid4())
             response_topic = f"{SPECIAL_RPC_PREFIX_OUTPUT}{call_id}"
